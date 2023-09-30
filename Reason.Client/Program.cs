@@ -1,63 +1,74 @@
-﻿using Microsoft.OpenApi.Models;
-using Microsoft.OpenApi.Readers;
+﻿using Spectre.Console;
+using Spectre.Console.Cli;
 
-const string swaggerUrl = "http://localhost:5225/swagger/v1/swagger.json";
+// TODO: Persist workspaces to disk on error or exit
 
-var defaultWorkspace = new Workspace("default");
-defaultWorkspace.RegisterApi("weather", "w", swaggerUrl);
-
-class Variable
+var app = new CommandApp();
+app.Configure(c =>
 {
-    public enum VariableType
-    {
-        String,
-        Number,
-        Boolean,
-        Object,
-        Array
-    }
+    c.AddCommand<DefaultCommand>("start");
+});
 
-    public object Value;
-    
-    public 
-}
+await app.RunAsync(args);
 
-class Api
+class DefaultCommand : AsyncCommand
 {
-    public string Name;
-    public string CommandPrefix;
-    public string Path;
-    public OpenApiDocument? Spec = null;
-
-    public Api(string name, string path, string prefix = null 
+    public async override Task<int> ExecuteAsync(CommandContext context)
     {
-        Name = name;
-        CommandPrefix = ;
-        Path = path;
-    }
-}
-
-class Workspace
-{
-    public string Name;
-    public List<Api> Apis;
-    public Dictionary<string, Variable> Variables;
-    public Dictionary<string, Variable> Secrets;
-    private HttpClient httpClient;
-
-    public Workspace(string name)
-    {
-        Name = name;
-    }
-    
-    public Workspace RegisterApi(string name, string prefix, string url)
-    {
-        var stream = httpClient.GetStreamAsync(url).Result;
-        var document = new OpenApiStreamReader().Read(stream, out var diagnostic);
-        var api = new Api(name, prefix, url);
-        api.Spec = document;
+        if (!AnsiConsole.Profile.Capabilities.Interactive)
+        {
+            AnsiConsole.MarkupLine("[red]Error:[/] This command is only available in interactive mode.");
+            return 1;
+        }
         
-        Apis.Add(api);
-        return this;
+        // TEMP SETUP
+        const string swaggerUrl = "http://localhost:5225/swagger/v1/swagger.json";
+        var workspace = Session.SelectWorkspace("default");
+        workspace.RegisterApi("weather", "w", swaggerUrl);
+
+        await workspace.Init();
+        
+        // Autocomplete:  https://codereview.stackexchange.com/questions/139172/autocompleting-console-input
+        while (true)
+        {
+            var command = AnsiConsole.Ask<string>("~> ");
+            if (command == "exit") { break; }
+            
+            // TODO: Run command parser, for now only api command
+
+            var split = command.Split('.');
+            var prefix = split[0];
+            var api = workspace.GetApi(prefix);
+            
+            if (api == null)
+            {
+                AnsiConsole.MarkupLine($"[red]ERR:[/] No api registered with prefix '{prefix}'");
+                continue;
+            }
+            
+            if (split.Length == 1)
+            {
+                AnsiConsole.MarkupLine(api.Help());
+                continue;
+            }
+
+            var operationPath = string.Join('.', split[1..]);
+            var operation = api.GetOperation(operationPath);
+            if (operation == null)
+            {
+                AnsiConsole.MarkupLine($"[red]ERR:[/] No operation found with path '{operationPath}'");
+                AnsiConsole.MarkupLine(api.Help());
+                continue;
+            }
+            
+            var result = await operation.Call(api.Client);
+            AnsiConsole.MarkupLine(result.IsSuccessStatusCode ? $"[green]Success:[/] {result.StatusCode}" : $"[red]Error:[/] {result.StatusCode}");
+            if (result.IsSuccessStatusCode)
+            {
+                AnsiConsole.WriteLine(await result.Content.ReadAsStringAsync());
+            }
+        }
+
+        return 0;
     }
 }
