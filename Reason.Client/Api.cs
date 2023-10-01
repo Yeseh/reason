@@ -1,5 +1,4 @@
-﻿using System.Net;
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
 using Reason.Client;
@@ -66,8 +65,7 @@ public class Api
 			foreach (var operation in path.Value.Operations)
 			{
 				var opId = operation.Value.OperationId;
-				// TODO: Handle duplicate operation ids?
-				// TODO: OperationPath might not be needed if only using opId 
+				// TODO: OperationPath might not be needed if only using opId, but might be useful for de-duplication later 
 				var opPath = new OperationPath(opId);
 				var httpOp = new HttpOperation(opId, path.Key, operation.Key.ToString());
 				Console.WriteLine($"Found operation {opPath} at {path.Key}");

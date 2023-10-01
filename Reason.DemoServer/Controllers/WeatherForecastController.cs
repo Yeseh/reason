@@ -19,8 +19,8 @@ public class WeatherForecastController : ControllerBase
         _logger = logger;
     }
 
-    [HttpGet(Name = "GetWeatherForecast")]
-    public IEnumerable<WeatherForecast> Get()
+    [HttpGet(Name = nameof(GetWeatherForecast))]
+    public IEnumerable<WeatherForecast> GetWeatherForecast()
     {
         return Enumerable.Range(1, 5).Select(index => new WeatherForecast
         {
@@ -31,8 +31,8 @@ public class WeatherForecastController : ControllerBase
         .ToArray();
     }
     
-    [HttpGet("nested", Name = "GetNestedWeatherForecast")]
-    public IEnumerable<WeatherForecast> GetNested()
+    [HttpGet("nested", Name = nameof(GetNestedWeatherForecast))]
+    public IEnumerable<WeatherForecast> GetNestedWeatherForecast()
     {
         return Enumerable.Range(1, 5).Select(index => new WeatherForecast
         {
