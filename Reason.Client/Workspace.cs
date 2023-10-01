@@ -1,9 +1,15 @@
-﻿public class Workspace
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
+
+[System.Serializable]
+public class Workspace
 {
-	public string Name;
-	public Dictionary<string, Api> Apis = new();
-	public Dictionary<string, Variable> Variables = new();
-	public Dictionary<string, Variable> Secrets = new();
+	public string Name { get; }
+	public Dictionary<string, Api> Apis { get; private set; } = new();
+	public Dictionary<string, Variable> Variables { get; private set; }  = new();
+	public Dictionary<string, Variable> Secrets { get; private set; } = new();
+	
+	[JsonIgnore]
 	private HttpClient httpClient;
 
 	public Workspace(string name)

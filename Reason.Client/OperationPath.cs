@@ -1,19 +1,20 @@
 ﻿namespace Reason.Client;
 
+[System.Serializable]
 public readonly struct OperationPath
 {
-	private readonly string _path;
+	public string Value {get;}
 	
 	public OperationPath(string operationId)
 	{
-		this._path = operationId.ToLower(); 
+		this.Value = operationId.ToLower(); 
 	}
     
 	public OperationPath(string path, string operationId)
 	{
 		var substr = path.Substring(1);
-		this._path = $"{substr.Replace("/", ".")}.{operationId}".ToLower(); 
+		this.Value = $"{substr.Replace("/", ".")}.{operationId}".ToLower(); 
 	}
         
-	public override string ToString() => _path;
+	public override string ToString() => Value;
 }

@@ -1,4 +1,6 @@
-﻿public class Variable
+﻿
+[System.Serializable]
+public class Variable
 {
 	public enum VariableType
 	{

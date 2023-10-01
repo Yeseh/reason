@@ -32,24 +32,27 @@ class DefaultCommand : AsyncCommand
         while (true)
         {
             var command = AnsiConsole.Ask<string>("~> ");
-            if (command == "exit") { break; }
-            
+            if (command == "exit")
+            {
+                Session.Persister.Persist(Session.CurrentWorkspace!);
+                break;
+            }
+
             // TODO: Run command parser, for now only api command
 
             var split = command.Split('.');
             var prefix = split[0];
             var api = workspace.GetApi(prefix);
-            
+
             if (api == null)
             {
                 AnsiConsole.MarkupLine($"[red]ERR:[/] No api registered with prefix '{prefix}'");
                 continue;
             }
-            
+
             if (split.Length == 1)
             {
                 AnsiConsole.MarkupLine(api.Help());
-                continue;
             }
 
             var operationPath = string.Join('.', split[1..]);
@@ -60,9 +63,11 @@ class DefaultCommand : AsyncCommand
                 AnsiConsole.MarkupLine(api.Help());
                 continue;
             }
-            
+
             var result = await operation.Call(api.Client);
-            AnsiConsole.MarkupLine(result.IsSuccessStatusCode ? $"[green]Success:[/] {result.StatusCode}" : $"[red]Error:[/] {result.StatusCode}");
+            AnsiConsole.MarkupLine(result.IsSuccessStatusCode
+                ? $"[green]Success:[/] {result.StatusCode}"
+                : $"[red]Error:[/] {result.StatusCode}");
             if (result.IsSuccessStatusCode)
             {
                 AnsiConsole.WriteLine(await result.Content.ReadAsStringAsync());

@@ -1,5 +1,6 @@
 ﻿using Reason.Client;
 
+[System.Serializable]
 public record HttpOperation
 {
 	public OperationPath OperationPath;
