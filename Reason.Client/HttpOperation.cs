@@ -1,24 +1,26 @@
-﻿using Reason.Client;
+﻿using System.Text.Json.Serialization;
+using Reason.Client;
 
 [System.Serializable]
 public record HttpOperation
 {
-	public OperationPath OperationPath;
-	private string _uri;
-	private HttpMethod _method;
-    
-	public HttpOperation(OperationPath path, string uri, string method)
+	public OperationPath OperationPath { get; set; }
+	public string Uri { get; set; }
+	public HttpMethod Method { get; set; }
+	
+	[JsonConstructor]
+	public HttpOperation(string operationPath, string uri, string method)
 	{
-		OperationPath = path;
-		_uri = uri;
-		_method = new(method);
+		OperationPath = new OperationPath(operationPath);
+		Uri = uri;
+		Method = new(method);
 	}
     
 	public async Task<HttpResponseMessage> Call(HttpClient client)
 	{
-		var method = _method.Method.ToUpper() switch
+		var method = Method.Method.ToUpper() switch
 		{
-			"GET" => client.GetAsync(new Uri(client.BaseAddress!, _uri)),
+			"GET" => client.GetAsync(new Uri(client.BaseAddress!, Uri)),
 			_ => throw new NotImplementedException()
 		};
         

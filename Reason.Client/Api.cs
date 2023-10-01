@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Net;
+using System.Text.Json.Serialization;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
 using Reason.Client;
@@ -8,11 +9,11 @@ public class Api
 {
 	public string Name { get; }
 	public string CommandPrefix {get;}
-	public Uri DefinitionUri { get; private set; }
-	public Uri BaseUri { get; private set; }
+	public Uri DefinitionUri { get; set; }
+	public Uri BaseUri { get; set; }
 	[JsonIgnore]
-	public OpenApiDocument? Spec { get; private set; }
-	public Dictionary<string, HttpOperation> Operations { get; private set; } = new();
+	public OpenApiDocument? Spec { get; set; }
+	public Dictionary<string, HttpOperation> Operations { get; set; } = new();
 	
 	[JsonIgnore]
 	public HttpClient Client = new();
@@ -23,11 +24,21 @@ public class Api
 		"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE", "CONNECT"
 	};
 
-	public Api(string name, string definitionUri, string? prefix = null)
+	[JsonConstructor]
+	public Api(string name, string commandPrefix, Uri definitionUri, Uri baseUri, Dictionary<string, HttpOperation> operations)
+	{
+		Name = name;
+		CommandPrefix = commandPrefix;
+		DefinitionUri = definitionUri;
+		BaseUri = baseUri;
+		Operations = operations;
+	}
+
+	public Api(string name, Uri definitionUri, string? prefix = null)
 	{
 		Name = name;
 		CommandPrefix = prefix ?? name;
-		DefinitionUri = new (definitionUri);
+		DefinitionUri = definitionUri;
 		BaseUri = null;
 	}
 
@@ -55,8 +66,10 @@ public class Api
 			foreach (var operation in path.Value.Operations)
 			{
 				var opId = operation.Value.OperationId;
+				// TODO: Handle duplicate operation ids?
+				// TODO: OperationPath might not be needed if only using opId 
 				var opPath = new OperationPath(opId);
-				var httpOp = new HttpOperation(opPath, path.Key, operation.Key.ToString());
+				var httpOp = new HttpOperation(opId, path.Key, operation.Key.ToString());
 				Console.WriteLine($"Found operation {opPath} at {path.Key}");
 				
 				Operations.Add(opPath.Value, httpOp);

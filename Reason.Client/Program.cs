@@ -6,47 +6,96 @@ using Spectre.Console.Cli;
 var app = new CommandApp();
 app.Configure(c =>
 {
-    c.AddCommand<DefaultCommand>("start");
+    c.PropagateExceptions();
+    c.AddCommand<StartCommand>("start");
 });
 
 await app.RunAsync(args);
 
-class DefaultCommand : AsyncCommand
+public static class RConsole 
 {
-    public async override Task<int> ExecuteAsync(CommandContext context)
+    public static void Error(string message)
+    {
+        AnsiConsole.MarkupLine($"[red bold]ERR:[/] {message}");
+    }
+    
+    public static void Warn(string message)
+    {
+        AnsiConsole.MarkupLine($"[yellow bold]WARN:[/] {message}");
+    }
+    
+    public static void Info(string message)
+    {
+        AnsiConsole.MarkupLine($"[blue bold]INFO:[/] {message}");
+    }
+    
+    public static void Debug(string message)
+    {
+        AnsiConsole.MarkupLine($"[magenta bold]DBUG:[/] {message}");
+    }
+}
+
+class StartCommand : AsyncCommand<StartCommand.Settings>
+{
+    public class Settings : CommandSettings
+    {
+        [CommandOption("-w|--workspace")]
+        public string? Workspace { get; set; }
+    }
+    
+    public async override Task<int> ExecuteAsync(CommandContext context, Settings settings)
     {
         if (!AnsiConsole.Profile.Capabilities.Interactive)
         {
-            AnsiConsole.MarkupLine("[red]Error:[/] This command is only available in interactive mode.");
+            RConsole.Error("This command is only available in interactive mode.");
             return 1;
         }
         
-        // TEMP SETUP
         const string swaggerUrl = "http://localhost:5225/swagger/v1/swagger.json";
-        var workspace = Session.SelectWorkspace("default");
-        workspace.RegisterApi("weather", "w", swaggerUrl);
-
-        await workspace.Init();
+        if (settings.Workspace == null)
+        {
+            RConsole.Warn("No workspace selected, selecting default workspace. This is not auto-persisted.");
+        }
+        
+        var workspaceName = settings.Workspace ?? "default";
+        Workspace? workspace = null;
+        if (Session.Persister.Exists(workspaceName))
+        {
+            AnsiConsole.MarkupLine("Loading existing workspace...");
+            workspace = await Session.SelectWorkspace(workspaceName);
+            // TODO: Always re-init workspace with option
+        }
+        else
+        {
+            AnsiConsole.MarkupLine("Creating new workspace...");
+            workspace = new Workspace(workspaceName);
+            // TODO: Register environment, builtins based on settings
+            workspace.RegisterApi("weather", "w", swaggerUrl);
+            await workspace.Init();
+            Session.SelectWorkspace(workspace);
+        }
         
         // Autocomplete:  https://codereview.stackexchange.com/questions/139172/autocompleting-console-input
         while (true)
         {
             var command = AnsiConsole.Ask<string>("~> ");
-            if (command == "exit")
+            var bExit = command is "exit" or "quit";
+            if (bExit)
             {
-                Session.Persister.Persist(Session.CurrentWorkspace!);
+                if (Session.CurrentWorkspace != null && !Session.IsDefaultWorkspace)
+                {
+                    await Session.Persister.SaveAsync(Session.CurrentWorkspace!);
+                }
                 break;
             }
 
             // TODO: Run command parser, for now only api command
-
             var split = command.Split('.');
             var prefix = split[0];
             var api = workspace.GetApi(prefix);
-
             if (api == null)
             {
-                AnsiConsole.MarkupLine($"[red]ERR:[/] No api registered with prefix '{prefix}'");
+                RConsole.Error($"No api registered with prefix '{prefix}'");
                 continue;
             }
 

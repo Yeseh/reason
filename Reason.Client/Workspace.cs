@@ -1,16 +1,28 @@
-﻿using System.Text.Json;
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 [System.Serializable]
 public class Workspace
 {
 	public string Name { get; }
-	public Dictionary<string, Api> Apis { get; private set; } = new();
-	public Dictionary<string, Variable> Variables { get; private set; }  = new();
-	public Dictionary<string, Variable> Secrets { get; private set; } = new();
+	public Dictionary<string, Api> Apis { get; set; } = new();
+	public Dictionary<string, Variable> Variables { get; set; }  = new();
+	public Dictionary<string, Variable> Secrets { get; set; } = new();
 	
 	[JsonIgnore]
 	private HttpClient httpClient;
+
+	[JsonConstructor]
+	public Workspace(
+		string name, 
+		Dictionary<string, Api> apis, 
+		Dictionary<string, Variable> variables,
+		Dictionary<string, Variable> secrets)
+	{
+		Name = name;
+		Apis = apis;
+		Variables = variables;
+		Secrets = secrets;	
+	}
 
 	public Workspace(string name)
 	{
@@ -19,8 +31,8 @@ public class Workspace
     
 	public Workspace RegisterApi(string name, string prefix, string url)
 	{
-		Console.WriteLine("Registering api" + name);
-		var api = new Api(name, url, prefix);
+		Console.WriteLine($"Registering api {name}");
+		var api = new Api(name, new Uri(url), prefix);
 		Apis.Add(api.CommandPrefix, api);
 		return this;
 	}
