@@ -1,6 +1,9 @@
 ﻿using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.OpenApi;
+using Microsoft.OpenApi.Extensions;
+using Microsoft.OpenApi.Models;
 
 namespace Reason.Client;
 
@@ -25,12 +28,22 @@ public class WindowsWorkspacePersister : WorkspacePersister
 	public async Task SaveAsync(Workspace ws)
 	{
 		var workspaceBytes = JsonSerializer.SerializeToUtf8Bytes(ws);
-		var savePath = Path.Combine(WorkspacePath, ws.Name);
-		Console.WriteLine($"Persisting workspace {ws.Name} to {savePath}");
-		Directory.CreateDirectory(savePath);
+		var workspaceFolder = Path.Combine(WorkspacePath, ws.Name);
+		Console.WriteLine($"Persisting workspace {ws.Name} to {workspaceFolder}");
 		
-		var workspaceFile = Path.Combine(savePath, "workspace.json");
-		File.WriteAllBytes(workspaceFile, workspaceBytes);
+		var workspaceFile = Path.Combine(workspaceFolder, "workspace.json");
+		var apisFolder = Path.Combine(workspaceFolder, "Apis"); 
+		
+		Directory.CreateDirectory(apisFolder);
+		
+		foreach (var api in ws.Apis)
+		{
+			var serializedSpec = api.Value.Spec.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+			var specFile = Path.Combine(apisFolder, $"{api.Value.CommandPrefix}-{api.Value.Name}.json");
+			File.WriteAllText(specFile, serializedSpec);
+		}
+		
+		File.WriteAllBytes(workspaceFile, workspaceBytes); 
 	}
 	
 	public async Task<Workspace?> LoadAsync(string workspace)
@@ -38,6 +51,7 @@ public class WindowsWorkspacePersister : WorkspacePersister
 		var loadPath = Path.Combine(WorkspacePath, workspace);
 		var workspaceFile = Path.Combine(loadPath, "workspace.json");
 		var workspaceBytes = await File.ReadAllBytesAsync(workspaceFile);
+		
 		var ws = JsonSerializer.Deserialize<Workspace>(workspaceBytes, JsonSerializerOptions.Default);
 		
 		return ws;

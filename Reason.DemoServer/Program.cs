@@ -10,25 +10,18 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+app.UseSwagger(c =>
 {
-    app.UseSwagger(c =>
+    c.PreSerializeFilters.Add((swaggerDoc, httpReq) =>
     {
-        c.PreSerializeFilters.Add((swaggerDoc, httpReq) =>
+        swaggerDoc.Servers = new List<OpenApiServer>
         {
-            swaggerDoc.Servers = new List<OpenApiServer>
-            {
-                new OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}" }
-            };
-        });
+            new OpenApiServer { Url = $"{httpReq.Scheme}://{httpReq.Host.Value}" }
+        };
     });
-    app.UseSwaggerUI();
-}
+});
 
+app.UseSwaggerUI();
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();

@@ -1,10 +1,24 @@
 ﻿using System.Text.Json.Serialization;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
-using Reason.Client;
+
+namespace Reason.Client;
+
+public interface ReasonApi<TRes>
+{
+	Task Init();
+	string Help();
+	ReasonCommand<TRes>? GetCommand(OperationPath operationPath);
+}
+
+public interface ReasonCommand<TResult>
+{
+	public Task<TResult> Call();
+	public Task<TResult> Undo();
+}
 
 [System.Serializable]
-public class Api
+public class OpenApiReasonApi : ReasonApi<HttpResponseMessage>
 {
 	public string Name { get; }
 	public string CommandPrefix {get;}
@@ -12,7 +26,7 @@ public class Api
 	public Uri BaseUri { get; set; }
 	[JsonIgnore]
 	public OpenApiDocument? Spec { get; set; }
-	public Dictionary<string, HttpOperation> Operations { get; set; } = new();
+	public Dictionary<string, HttpCommand> Operations { get; set; } = new();
 	
 	[JsonIgnore]
 	public HttpClient Client = new();
@@ -24,7 +38,12 @@ public class Api
 	};
 
 	[JsonConstructor]
-	public Api(string name, string commandPrefix, Uri definitionUri, Uri baseUri, Dictionary<string, HttpOperation> operations)
+	public OpenApiReasonApi(
+		string name, 
+		string commandPrefix, 
+		Uri definitionUri, 
+		Uri baseUri, 
+		Dictionary<string, HttpCommand> operations)
 	{
 		Name = name;
 		CommandPrefix = commandPrefix;
@@ -33,7 +52,10 @@ public class Api
 		Operations = operations;
 	}
 
-	public Api(string name, Uri definitionUri, string? prefix = null)
+	public OpenApiReasonApi(
+		string name, 
+		Uri definitionUri, 
+		string? prefix = null)
 	{
 		Name = name;
 		CommandPrefix = prefix ?? name;
@@ -46,10 +68,15 @@ public class Api
 		return $"This is the help info for {Name}\n";
 	}
 
-	public HttpOperation? GetOperation(string path)
+	public HttpCommand? GetOperation(string path)
 	{
 		var opPath = new OperationPath(path);
 		return Operations.TryGetValue(opPath.Value, out var operation) ? operation : null;
+	}
+	
+	public ReasonCommand<HttpResponseMessage>? GetCommand(OperationPath path)
+	{
+		return Operations.TryGetValue(path.Value, out var operation) ? operation : null;
 	}
 
 	public async Task Init()
@@ -67,7 +94,7 @@ public class Api
 				var opId = operation.Value.OperationId;
 				// TODO: OperationPath might not be needed if only using opId, but might be useful for de-duplication later 
 				var opPath = new OperationPath(opId);
-				var httpOp = new HttpOperation(opId, path.Key, operation.Key.ToString());
+				var httpOp = new HttpCommand(opId, path.Key, operation.Key.ToString());
 				Console.WriteLine($"Found operation {opPath} at {path.Key}");
 				
 				Operations.Add(opPath.Value, httpOp);

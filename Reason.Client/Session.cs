@@ -5,6 +5,8 @@ public static class Session
 	public static Workspace? CurrentWorkspace;
 	
 	public static Dictionary<string, Workspace> Workspaces = new();
+
+	public static LinkedList<string> CommandStack = new();
 	
 	// TODO: Make this configurable/OS specific
 	public static WorkspacePersister Persister = new WindowsWorkspacePersister();

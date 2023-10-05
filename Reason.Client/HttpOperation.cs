@@ -2,23 +2,25 @@
 using Reason.Client;
 
 [System.Serializable]
-public record HttpOperation
+public record HttpCommand : ReasonCommand<HttpResponseMessage>
 {
-	public OperationPath OperationPath { get; set; }
+	public string OperationPath { get; set; }
 	public string Uri { get; set; }
-	public HttpMethod Method { get; set; }
+	public  string Method { get; set; }
 	
 	[JsonConstructor]
-	public HttpOperation(string operationPath, string uri, string method)
+	public HttpCommand(string operationPath, string uri, string method)
 	{
-		OperationPath = new OperationPath(operationPath);
+		OperationPath = operationPath;
 		Uri = uri;
 		Method = new(method);
 	}
+	
+	public HttpCommand(string operationPath, string uri, string method)
     
 	public async Task<HttpResponseMessage> Call(HttpClient client)
 	{
-		var method = Method.Method.ToUpper() switch
+		var method = Method.ToUpper() switch
 		{
 			"GET" => client.GetAsync(new Uri(client.BaseAddress!, Uri)),
 			_ => throw new NotImplementedException()

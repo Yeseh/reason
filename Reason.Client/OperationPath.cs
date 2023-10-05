@@ -1,13 +1,16 @@
-﻿namespace Reason.Client;
+﻿using System.Text.Json.Serialization;
+
+namespace Reason.Client;
 
 [System.Serializable]
 public readonly struct OperationPath
 {
 	public string Value {get;}
 	
-	public OperationPath(string operationId)
+	[JsonConstructor]
+	public OperationPath(string value)
 	{
-		this.Value = operationId.ToLower(); 
+		this.Value = value.ToLower(); 
 	}
     
 	public OperationPath(string path, string operationId)

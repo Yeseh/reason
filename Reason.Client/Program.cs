@@ -12,7 +12,7 @@ app.Configure(c =>
 
 await app.RunAsync(args);
 
-public static class RConsole 
+public static class RSN 
 {
     public static void Error(string message)
     {
@@ -47,14 +47,14 @@ class StartCommand : AsyncCommand<StartCommand.Settings>
     {
         if (!AnsiConsole.Profile.Capabilities.Interactive)
         {
-            RConsole.Error("This command is only available in interactive mode.");
+            RSN.Error("This command is only available in interactive mode.");
             return 1;
         }
         
         const string swaggerUrl = "http://localhost:5225/swagger/v1/swagger.json";
         if (settings.Workspace == null)
         {
-            RConsole.Warn("No workspace selected, selecting default workspace. This is not auto-persisted.");
+            RSN.Warn("No workspace selected, selecting default workspace. This is not auto-persisted.");
         }
         
         var workspaceName = settings.Workspace ?? "default";
@@ -69,8 +69,10 @@ class StartCommand : AsyncCommand<StartCommand.Settings>
         {
             AnsiConsole.MarkupLine("Creating new workspace...");
             workspace = new Workspace(workspaceName);
+            
             // TODO: Register environment, builtins based on settings
             workspace.RegisterApi("weather", "w", swaggerUrl);
+            
             await workspace.Init();
             Session.SelectWorkspace(workspace);
         }
@@ -95,7 +97,7 @@ class StartCommand : AsyncCommand<StartCommand.Settings>
             var api = workspace.GetApi(prefix);
             if (api == null)
             {
-                RConsole.Error($"No api registered with prefix '{prefix}'");
+                RSN.Error($"No api registered with prefix '{prefix}'");
                 continue;
             }
 
