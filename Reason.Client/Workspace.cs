@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Serialization;
+using Reason.Client;
 
 [System.Serializable]
 public class Workspace

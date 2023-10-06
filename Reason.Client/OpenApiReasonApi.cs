@@ -4,21 +4,27 @@ using Microsoft.OpenApi.Readers;
 
 namespace Reason.Client;
 
-public interface ReasonApi<TRes>
+public interface ReasonApi
 {
 	Task Init();
 	string Help();
-	ReasonCommand<TRes>? GetCommand(OperationPath operationPath);
+	ReasonCommand? GetCommand(OperationPath operationPath);
 }
 
-public interface ReasonCommand<TResult>
+public interface ReasonCommand
 {
-	public Task<TResult> Call();
-	public Task<TResult> Undo();
+	// TODO: Obj ugly, find right abstraction
+	Task<object?> Call();
+	Task<object?> Undo();
+}
+
+public interface UndoReasonCommand : ReasonCommand
+{
+	Task<object?> Undo();
 }
 
 [System.Serializable]
-public class OpenApiReasonApi : ReasonApi<HttpResponseMessage>
+public class OpenApiReasonApi : ReasonApi
 {
 	public string Name { get; }
 	public string CommandPrefix {get;}
@@ -26,7 +32,7 @@ public class OpenApiReasonApi : ReasonApi<HttpResponseMessage>
 	public Uri BaseUri { get; set; }
 	[JsonIgnore]
 	public OpenApiDocument? Spec { get; set; }
-	public Dictionary<string, HttpCommand> Operations { get; set; } = new();
+	public Dictionary<string, ReasonCommand> Commands { get; set; } = new();
 	
 	[JsonIgnore]
 	public HttpClient Client = new();
@@ -43,13 +49,13 @@ public class OpenApiReasonApi : ReasonApi<HttpResponseMessage>
 		string commandPrefix, 
 		Uri definitionUri, 
 		Uri baseUri, 
-		Dictionary<string, HttpCommand> operations)
+		Dictionary<string, ReasonCommand> commands)
 	{
 		Name = name;
 		CommandPrefix = commandPrefix;
 		DefinitionUri = definitionUri;
 		BaseUri = baseUri;
-		Operations = operations;
+		Commands = commands;
 	}
 
 	public OpenApiReasonApi(
@@ -68,15 +74,15 @@ public class OpenApiReasonApi : ReasonApi<HttpResponseMessage>
 		return $"This is the help info for {Name}\n";
 	}
 
-	public HttpCommand? GetOperation(string path)
+	public ReasonCommand? GetCommand(string path)
 	{
 		var opPath = new OperationPath(path);
-		return Operations.TryGetValue(opPath.Value, out var operation) ? operation : null;
+		return Commands.TryGetValue(opPath.Value, out var operation) ? operation : null;
 	}
 	
-	public ReasonCommand<HttpResponseMessage>? GetCommand(OperationPath path)
+	public ReasonCommand GetCommand(OperationPath path)
 	{
-		return Operations.TryGetValue(path.Value, out var operation) ? operation : null;
+		return Commands.TryGetValue(path.Value, out var operation) ? operation : null;
 	}
 
 	public async Task Init()
@@ -94,10 +100,10 @@ public class OpenApiReasonApi : ReasonApi<HttpResponseMessage>
 				var opId = operation.Value.OperationId;
 				// TODO: OperationPath might not be needed if only using opId, but might be useful for de-duplication later 
 				var opPath = new OperationPath(opId);
-				var httpOp = new HttpCommand(opId, path.Key, operation.Key.ToString());
+				var httpOp = new HttpCommand(opId, path.Key, operation.Key.ToString(), Client);
 				Console.WriteLine($"Found operation {opPath} at {path.Key}");
 				
-				Operations.Add(opPath.Value, httpOp);
+				Commands.Add(opPath.Value, httpOp);
 			}
 		}
 	}

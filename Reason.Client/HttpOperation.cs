@@ -1,32 +1,52 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 using Reason.Client;
 
 [System.Serializable]
-public record HttpCommand : ReasonCommand<HttpResponseMessage>
+public struct ReasonCommandData
 {
 	public string OperationPath { get; set; }
 	public string Uri { get; set; }
-	public  string Method { get; set; }
+	public string Method { get; set; }
+}
+
+public record HttpCommand : ReasonCommand, SerializeData
+{
+	private ReasonCommandData Data { get; }
+
+	private HttpClient _httpClient = new();
 	
-	[JsonConstructor]
-	public HttpCommand(string operationPath, string uri, string method)
+	public HttpCommand(string operationPath, string uri, string method, HttpClient client)
 	{
-		OperationPath = operationPath;
-		Uri = uri;
-		Method = new(method);
-	}
-	
-	public HttpCommand(string operationPath, string uri, string method)
-    
-	public async Task<HttpResponseMessage> Call(HttpClient client)
-	{
-		var method = Method.ToUpper() switch
+		_httpClient = client;
+		Data = new ReasonCommandData()
 		{
-			"GET" => client.GetAsync(new Uri(client.BaseAddress!, Uri)),
+			OperationPath = operationPath,
+			Uri = uri,
+			Method = method
+		};
+	}
+
+	public async Task<object?> Call()
+	{
+		var method = Data.Method.ToUpper() switch
+		{
+			"GET" => _httpClient.GetAsync(new Uri(_httpClient.BaseAddress!, Data.Uri)),
 			_ => throw new NotImplementedException()
 		};
         
 		var response = await method;
 		return response;
+	}
+
+	public Task<object?> Undo()
+	{
+		throw new NotImplementedException();
+	}
+
+	public byte[] SerializeData()
+	{
+		var data = JsonSerializer.SerializeToUtf8Bytes(Data);
+		return data;
 	}
 }

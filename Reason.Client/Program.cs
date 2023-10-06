@@ -19,6 +19,11 @@ public static class RSN
         AnsiConsole.MarkupLine($"[red bold]ERR:[/] {message}");
     }
     
+    public static void Success(string message)
+    {
+        AnsiConsole.MarkupLine($"[green bold]SUC6:[/] {message}");
+    }
+    
     public static void Warn(string message)
     {
         AnsiConsole.MarkupLine($"[yellow bold]WARN:[/] {message}");
@@ -80,8 +85,8 @@ class StartCommand : AsyncCommand<StartCommand.Settings>
         // Autocomplete:  https://codereview.stackexchange.com/questions/139172/autocompleting-console-input
         while (true)
         {
-            var command = AnsiConsole.Ask<string>("~> ");
-            var bExit = command is "exit" or "quit";
+            var input = AnsiConsole.Ask<string>("~> ");
+            var bExit = input is "exit" or "quit";
             if (bExit)
             {
                 if (Session.CurrentWorkspace != null && !Session.IsDefaultWorkspace)
@@ -92,7 +97,7 @@ class StartCommand : AsyncCommand<StartCommand.Settings>
             }
 
             // TODO: Run command parser, for now only api command
-            var split = command.Split('.');
+            var split = input.Split('.');
             var prefix = split[0];
             var api = workspace.GetApi(prefix);
             if (api == null)
@@ -106,22 +111,26 @@ class StartCommand : AsyncCommand<StartCommand.Settings>
                 AnsiConsole.MarkupLine(api.Help());
             }
 
-            var operationPath = string.Join('.', split[1..]);
-            var operation = api.GetOperation(operationPath);
-            if (operation == null)
+            var commandPath = string.Join('.', split[1..]);
+            var command = api.GetCommand(commandPath);
+            if (command == null)
             {
-                AnsiConsole.MarkupLine($"[red]ERR:[/] No operation found with path '{operationPath}'");
+                AnsiConsole.MarkupLine($"[red]ERR:[/] No operation found with path '{commandPath}'");
                 AnsiConsole.MarkupLine(api.Help());
                 continue;
             }
 
-            var result = await operation.Call(api.Client);
-            AnsiConsole.MarkupLine(result.IsSuccessStatusCode
-                ? $"[green]Success:[/] {result.StatusCode}"
-                : $"[red]Error:[/] {result.StatusCode}");
-            if (result.IsSuccessStatusCode)
+            var result = await command.Call() as HttpResponseMessage;
+            var bSucces = result is { IsSuccessStatusCode: true };
+            if (bSucces)
             {
+                RSN.Success(result.StatusCode.ToString());
+                // TODO: Add pretty format JSON
                 AnsiConsole.WriteLine(await result.Content.ReadAsStringAsync());
+            }
+            else
+            {
+                RSN.Error(result.StatusCode.ToString());
             }
         }
 

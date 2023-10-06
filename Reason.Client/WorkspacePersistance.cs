@@ -14,9 +14,9 @@ public interface WorkspacePersister
 	bool Exists(string workspace);
 }
 
-public interface Serializer
+public interface SerializeData 
 {
-	byte[] Serialize();
+	byte[] SerializeData();
 }
 
 public class WindowsWorkspacePersister : WorkspacePersister 

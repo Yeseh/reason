@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Text;
-using System.Xml.Schema;
+﻿using System.Text;
 
 namespace Reason.Client.Script;
 
@@ -20,7 +18,8 @@ public enum TokenType
     Secret,
     Env,
     Equal,
-    Break,
+    Space,
+    LineBreak,
     Dot,
     At,
     Pound,
@@ -29,9 +28,12 @@ public enum TokenType
     Minus,
     MinusMinus,
     Pipe,
+    LParen,
+    RParen,
+    EOF,
 }
 
-public record struct Token(TokenType Type, string? Literal = null, int? index = -1);
+public record struct Token(TokenType Type, string? Literal = null, int? Index = -1);
 
 public class Lexer 
 {
@@ -45,31 +47,40 @@ public class Lexer
 
     private string _text = string.Empty;
     private int _pos = 0;
-    private char? currentChar;
+    private char currentChar;
     
     public Lexer(string command)
     {
         _text = command;
+        currentChar = _text[0];
     }
 
     public IEnumerable<Token> Lex()
     {
-        while (currentChar != null)
+        var token = GetNextToken();
+        yield return token; 
+        
+        while (token.Type != TokenType.EOF)
         {
-            yield return GetNextToken();
+            token = GetNextToken();
+            yield return token;
         }
     }
     
     private Token GetNextToken()
     {
+        if (currentChar == char.MinValue)
+        {
+            return new Token(TokenType.EOF, Index: _pos);
+        }
         // We know this is not null due to check in Lex()
+        var chr = currentChar;
         Token token;
-        var chr = currentChar!.Value;
         
         // Handle BREAK first as the token doesnt have a literal
         // Add a token for all combined tabs/spaces between other tokens
         // Might be semantically important later
-        if (WhiteSpace.Contains(chr)) { return Break(); }
+        if (WhiteSpace.Contains(chr)) { return Space(); }
 
         token = chr switch
         {
@@ -81,40 +92,43 @@ public class Lexer
             '#' => new Token(TokenType.Pound, "#", _pos),
             '.' => new Token(TokenType.Dot, ".", _pos),
             '|' => new Token(TokenType.Pipe, "|", _pos),
+            ')' => new Token(TokenType.RParen, ")", _pos),
+            '(' => new Token(TokenType.LParen, "(", _pos),
+            '\n' => new Token(TokenType.LineBreak, "\n", _pos),
+            '\r' when Peek() == '\n' => new Token(TokenType.LineBreak, "\r\n", _pos),
             
             // This could be, keyword, identifier, or literal value in case of var/secret/env assignment
             // Semantics decide if its ID or Literal so put it in Identitifier token for now
             _ => KeywordOrID()
         };
         
-        Advance(token.Literal!.Length);
+        Advance(token.Literal?.Length ?? 1);
         return token;
     }
 
     private void Advance(int count = 1)
     {
-        this._pos += count;
-        if (_pos > _text.Length)
+        _pos += count;
+        if (_pos > _text.Length - 1)
         {
-            currentChar = null;
+            currentChar = char.MinValue;
             return;
         }
         currentChar = _text[_pos];
     }
 
-    private char? Peek()
+    private char Peek()
     {
-        var localPos = _pos;
-        var textSpan = _text.AsSpan();
-        var bEnd = localPos > _text.Length - 1;
-        return bEnd ? null : _text[localPos];
+        var bEnd = _pos > _text.Length - 1;
+        return bEnd ? char.MinValue : _text[_pos + 1];
     }
 
     private string PeekN(int num)
     {
         var localPos = _pos;
         var textSpan = _text.AsSpan();
-        var result = new StringBuilder(); 
+        var result = new StringBuilder(num); 
+        
         while (localPos - _pos < num)
         {
             result.Append(textSpan[localPos]);
@@ -123,27 +137,43 @@ public class Lexer
         return result.ToString();
     }
     
-    private Token Break()
+    private Token Space()
     {
-        while (WhiteSpace.Contains(currentChar!.Value)) { Advance(); }
-        return new Token(TokenType.Break);
+        var token = new Token(TokenType.Space, " ", _pos);
+        while (WhiteSpace.Contains(currentChar)) { Advance(); }
+
+        return token;
+    }
+
+    private int NextIndexOf(char chr)
+    {
+        var localPos = _pos;
+        var slice = _text.AsSpan().Slice(localPos);
+        var idx = slice.IndexOf(chr);
+        var ret = idx == -1 ? -1 : idx + localPos;
+        return ret;
     }
 
     public Token KeywordOrID()
     {
+        var localPos = _pos;
+        var cur = _text[localPos];
         var result = new StringBuilder();
-        result.Append(currentChar!.Value);
-
-        while (currentChar != ' ' && currentChar != '.')
+        // Spaces indicate a new semantic
+        // Dots seperate identifiers of command paths
+        while (cur != ' ' && cur != '.' && cur > char.MinValue)
         {
-            _pos++;  
-            result.Append(_text[_pos]);
+            result.Append(cur);
+            cur = localPos >= _text.Length -1 
+                ? char.MinValue 
+                : _text[++localPos];
         }
         
         var resultStr = result.ToString();
         var bKeyword = KeyWords.TryGetValue(resultStr, out var token);
         if (!bKeyword) {  token = new Token(TokenType.Literal, resultStr); }
+        var retToken = token with {  Index = _pos };
         
-        return token;
+        return retToken;
     }
 }
