@@ -30,6 +30,8 @@ public enum TokenType
     Pipe,
     LParen,
     RParen,
+    Quote,
+    DoubleQuote,
     EOF,
 }
 
@@ -67,7 +69,7 @@ public class Lexer
         }
     }
     
-    private Token GetNextToken()
+    public Token GetNextToken()
     {
         if (currentChar == char.MinValue)
         {

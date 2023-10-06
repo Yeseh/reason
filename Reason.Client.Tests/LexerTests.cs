@@ -42,6 +42,40 @@ public class LexerTests
     }
     
     [Fact]
+    public void Lexer_should_insert_tokens_for_commands()
+    {
+        var command = "this.is.my.command @value $pw ( @another )";
+        var expected = new Token[]
+        {
+            new Token(TokenType.Literal),
+            new Token(TokenType.Dot),
+            new Token(TokenType.Literal, "is"),
+            new Token(TokenType.Dot),
+            new Token(TokenType.Literal, "my" ),
+            new Token(TokenType.Dot),
+            new Token(TokenType.Literal, "command"),
+            new Token(TokenType.Space),
+            new Token(TokenType.At, "@"),
+            new Token(TokenType.Literal, "value"),
+            new Token(TokenType.Space),
+            new Token(TokenType.Dollar, "$"),
+            new Token(TokenType.Literal, "pw"),
+            new Token(TokenType.Space),
+            new Token(TokenType.LParen),
+            new Token(TokenType.Space),
+            new Token(TokenType.At),
+            new Token(TokenType.Literal, "another"),
+            new Token(TokenType.Space),
+            new Token(TokenType.RParen),
+            
+            new Token(TokenType.EOF),
+        };
+        var tokens = new Lexer(command).Lex();
+        AssertTests(tokens, command, expected);
+    }
+    
+    
+    [Fact]
     public void Lexer_should_insert_tokens_for_keywords()
     {
         var command = "var env secret";
