@@ -14,6 +14,7 @@ namespace Reason.Client.Script;
  */
 public enum TokenType
 {
+    EOF,
     Var,
     Secret,
     Env,
@@ -32,7 +33,6 @@ public enum TokenType
     RParen,
     Quote,
     DoubleQuote,
-    EOF,
 }
 
 public record struct Token(TokenType Type, string? Literal = null, int? Index = -1);

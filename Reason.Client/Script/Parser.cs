@@ -8,12 +8,11 @@ public record AstNode();
 public record Script(AstNode Root) : AstNode;
 public record Ref(Token Type, Lit Lit) : AstNode;
 public record Lit(Token Token) : AstNode;
-public record Ass(AstNode rhs, AstNode lhs) : AstNode;
-
+public record Tuple(IEnumerable<AstNode> Members) : AstNode;
+public record Ass(Token Token, AstNode Rhs, AstNode Lhs) : AstNode;
 public record CommandPath(IEnumerable<Lit> Segments) : AstNode;
-
 public record CommandParams(IEnumerable<AstNode> Params) : AstNode;
-public record Invocation(CommandPath command, CommandParams? pars = null) : AstNode;
+public record Invocation(CommandPath Command, CommandParams? Params = null) : AstNode;
 
 /*
  * Notes:
@@ -21,9 +20,10 @@ public record Invocation(CommandPath command, CommandParams? pars = null) : AstN
  * 
  * script: invocation | assignment | ref?
  * ref: secret_ref | variable_ref | env_ref
- * invocation: command_path param_tuple?
- * param_tuple: LPAREN (ref|param_tuple|LITERAL) RPAREN 
- * assignment: (VAR|SECRET|ENV) EQUALS (ref | LITERAL | invocation?)
+ * invocation: command_path SPACE command_params?
+ * tuple: LPAREN ((ref|tuple|LITERAL)SPACE)* RPAREN 
+ * command_params: ((ref|tuple|LITERAL)SPACE)*
+ * assignment: (VAR|SECRET|ENV) SPACE EQUALS SPACE (ref | LITERAL | invocation?)
  * command_path: LITERAL (DOT LITERAL)*
  * secret_ref: POUND LITERAL
  * variable_ref: DOLLAR LITERAL
@@ -35,48 +35,49 @@ public class Parser
     private Token currentToken;
     private Exception[] Errors;
 
-    private static TokenType[] RefTokens = new[] { TokenType.At, TokenType.Dollar, TokenType.Pound };
-    private static TokenType[] AssignmentTokens = new[] { TokenType.Env, TokenType.Secret, TokenType.Var };
+    private static TokenType[] RefTokens = { TokenType.At, TokenType.Dollar, TokenType.Pound };
+    private static TokenType[] AssignmentTokens = { TokenType.Env, TokenType.Secret, TokenType.Var };
     
     public Parser(Lexer lexer)
     {
         _lex = lexer;
     }
 
-    public Script Parse(Lexer lex)
+    public Script Parse()
     {
+        currentToken = _lex.GetNextToken();
         var script = Script();
         return script;
     }
     
+    // TODO: For fun: make this more performant by avoiding the array allocation 
     private Token Eat(params TokenType[] types)
     {
         if (types.Contains(currentToken.Type))
         {
+            var cur = currentToken;
             currentToken = _lex.GetNextToken();
-            return currentToken;
+            return cur;
         }
-        else
-        {
-            var expected = string.Join(" or ", types);
-            throw new Exception($"ParserError: Expected one of {expected} got {currentToken.Type}");
-        }
+        
+        var expected = string.Join(" or ", types);
+        throw new Exception($"ParserError: Expected one of {expected} got {currentToken.Type}");
     }
 
-    public Lit Lit()
+    private Lit Lit()
     {
         var token = Eat(TokenType.Literal);
         return new Lit(token);
     }
 
-    public Ref Ref()
+    private Ref Ref()
     {
         var type = Eat(RefTokens);
         var lit = Lit(); 
         return new Ref(type, lit);
     }
     
-    public Script Script()
+    private Script Script()
     {
         AstNode? node = null;
         var token = currentToken;
@@ -107,9 +108,10 @@ public class Parser
 
     private Ass Assignment()
     {
-        Eat(AssignmentTokens);
-        var lhs = Lit(); 
+        var ate = Eat(AssignmentTokens);
+        Eat(TokenType.Space);
         
+        var lhs = Lit(); 
         Eat(TokenType.Space);
         Eat(TokenType.Equal);
         Eat(TokenType.Space);
@@ -118,7 +120,7 @@ public class Parser
             ? Ref()
             : Lit();
         
-        return new Ass(rhs, lhs);
+        return new Ass(ate, rhs, lhs);
     }
 
     private CommandPath CommandPath()
@@ -144,35 +146,67 @@ public class Parser
             AstNode node;
             Eat(TokenType.Space);
             var ate = Eat(accepted.ToArray());
-            
+
             if (RefTokens.Contains(ate.Type))
             {
-                nodes.Add(Ref());
+                var lit = Lit();
+                var r = new Ref(ate, lit);
+                nodes.Add(r);
             }
             else if (ate.Type == TokenType.LParen)
             {
-                nodes.Add(CommandParams());
+                nodes.Add(Tuple());
             }
             else if (ate.Type == TokenType.Literal)
             {
-                nodes.Add(Lit());
+                var lit = new Lit(ate);
+                nodes.Add(lit);
             }
         }
         
         return new CommandParams(nodes);
     }
 
+    private Tuple Tuple()
+    {
+        var nodes = new List<AstNode>();
+        var accepted = RefTokens.Concat(new[] { TokenType.LParen, TokenType.RParen, TokenType.Literal });
+        while (currentToken.Type == TokenType.Space)
+        {
+            AstNode node;
+            Eat(TokenType.Space);
+            var ate = Eat(accepted.ToArray());
+
+            if (ate.Type == TokenType.RParen)
+            {
+                break;
+            }
+            if (RefTokens.Contains(ate.Type))
+            {
+                var lit = Lit();
+                var r = new Ref(ate, lit);
+                nodes.Add(r);
+            }
+            else if (ate.Type == TokenType.LParen)
+            {
+                nodes.Add(Tuple());
+                Eat(TokenType.Space);
+                Eat(TokenType.RParen);
+            }
+            else if (ate.Type == TokenType.Literal)
+            {
+                var lit = new Lit(ate);
+                nodes.Add(lit);
+            }
+        }
+        
+        return new Tuple(nodes);
+    }
+
     private Invocation Invocation()
     {
         var commandPath = CommandPath();
-        var ate = Eat(TokenType.EOF, TokenType.Space);
-        
-        if (ate.Type == TokenType.EOF)
-        {
-            return new Invocation(commandPath, null);
-        }
-
         var commandParams = CommandParams();
-        return new Invocation(commandPath, null);
+        return new Invocation(commandPath, commandParams);
     }
 }

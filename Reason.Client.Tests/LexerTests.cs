@@ -47,7 +47,7 @@ public class LexerTests
         var command = "this.is.my.command @value $pw ( @another )";
         var expected = new Token[]
         {
-            new Token(TokenType.Literal),
+            new Token(TokenType.Literal, "this"),
             new Token(TokenType.Dot),
             new Token(TokenType.Literal, "is"),
             new Token(TokenType.Dot),
