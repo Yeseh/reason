@@ -1,8 +1,11 @@
-﻿using Spectre.Console;
+﻿using System.Diagnostics;
+using System.Text.Json;
+using Reason.Client;
+using Reason.Client.Script;
+using Spectre.Console;
 using Spectre.Console.Cli;
 
 // TODO: Persist workspaces to disk on error or exit
-
 var app = new CommandApp();
 app.Configure(c =>
 {
@@ -12,32 +15,52 @@ app.Configure(c =>
 
 await app.RunAsync(args);
 
-public static class RSN 
+public enum OutputStatus
 {
-    public static void Error(string message)
+    Success = default,
+	Warning,
+	Error,
+    Info,
+    Debug
+} 
+
+public static class Rsn 
+{
+    public static void Print(string message, OutputStatus status = OutputStatus.Info)
     {
-        AnsiConsole.MarkupLine($"[red bold]ERR:[/] {message}");
+        var msg = status switch
+        {
+            OutputStatus.Debug => Debug(message),
+            OutputStatus.Warning => Warn(message),
+            OutputStatus.Info => Info(message),
+            OutputStatus.Error => Error (message),
+            OutputStatus.Success => Success(message),
+            _ => throw new UnreachableException() 
+        };
+        AnsiConsole.MarkupLine(msg);
+    }
+    public static string Msg(string message, OutputStatus status = OutputStatus.Info)
+    {
+        return status switch
+        {
+            OutputStatus.Debug => Debug(message),
+            OutputStatus.Warning => Warn(message),
+            OutputStatus.Info => Info(message),
+            OutputStatus.Error => Error (message),
+            OutputStatus.Success => Success(message),
+            _ => throw new UnreachableException() 
+        };
     }
     
-    public static void Success(string message)
-    {
-        AnsiConsole.MarkupLine($"[green bold]SUC6:[/] {message}");
-    }
+    public static string Error(string message) => $"[red bold]ERR:[/] {message}";
     
-    public static void Warn(string message)
-    {
-        AnsiConsole.MarkupLine($"[yellow bold]WARN:[/] {message}");
-    }
+    public static string Success(string message) => $"[green bold]SUC6:[/] {message}";
     
-    public static void Info(string message)
-    {
-        AnsiConsole.MarkupLine($"[blue bold]INFO:[/] {message}");
-    }
+    public static string Warn(string message) => $"[yellow bold]WARN:[/] {message}";
     
-    public static void Debug(string message)
-    {
-        AnsiConsole.MarkupLine($"[magenta bold]DBUG:[/] {message}");
-    }
+    public static string Info(string message) => $"[blue bold]INFO:[/] {message}";
+    
+    public static string Debug(string message) => $"[magenta bold]DBUG:[/] {message}";
 }
 
 class StartCommand : AsyncCommand<StartCommand.Settings>
@@ -47,93 +70,106 @@ class StartCommand : AsyncCommand<StartCommand.Settings>
         [CommandOption("-w|--workspace")]
         public string? Workspace { get; set; }
     }
-    
-    public async override Task<int> ExecuteAsync(CommandContext context, Settings settings)
+
+    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
     {
         if (!AnsiConsole.Profile.Capabilities.Interactive)
         {
-            RSN.Error("This command is only available in interactive mode.");
+            Rsn.Print("This command is only available in interactive mode.", OutputStatus.Error);
             return 1;
         }
-        
+
         const string swaggerUrl = "http://localhost:5225/swagger/v1/swagger.json";
         if (settings.Workspace == null)
         {
-            RSN.Warn("No workspace selected, selecting default workspace. This is not auto-persisted.");
+            Rsn.Print("No workspace selected, selecting default workspace. This is not auto-persisted.", OutputStatus.Warning);
         }
-        
+
         var workspaceName = settings.Workspace ?? "default";
         Workspace? workspace = null;
-        if (Session.Persister.Exists(workspaceName))
+        
+        // TODO: Load workspace from disk
+        if (Session.WorkspaceExists(workspaceName))
         {
-            AnsiConsole.MarkupLine("Loading existing workspace...");
-            workspace = await Session.SelectWorkspace(workspaceName);
-            // TODO: Always re-init workspace with option
+            Rsn.Print($"Loading workspace {workspaceName}");
+            workspace = await Session.LoadWorkspace(workspaceName);
         }
         else
         {
-            AnsiConsole.MarkupLine("Creating new workspace...");
+            Rsn.Print("Creating new workspace...");
             workspace = new Workspace(workspaceName);
-            
+            var weatherApi = new OpenApiReasonApi("weather", "w", swaggerUrl);
+
             // TODO: Register environment, builtins based on settings
-            workspace.RegisterApi("weather", "w", swaggerUrl);
-            
-            await workspace.Init();
-            Session.SelectWorkspace(workspace);
+            Rsn.Print($"Registering api {weatherApi.Name}");
+            workspace.RegisterApi(weatherApi);
+            Session.SetActiveWorkspace(workspace);
         }
-        
+
+        Rsn.Print($"Registering builtin commands");
+        workspace.RegisterBuiltins();
+        Rsn.Print($"Initializing workspace {workspace.Name}");
+        await workspace.Init();
+
+        foreach (var api in workspace.Apis)
+        {
+            Rsn.Print(api.Value.Help());
+        }
+
+        Rsn.Print($"Selected workspace {workspace.Name}");
+
         // Autocomplete:  https://codereview.stackexchange.com/questions/139172/autocompleting-console-input
         while (true)
         {
-            var input = AnsiConsole.Ask<string>("~> ");
+            var input = AnsiConsole.Ask<string>($"[bold]([green]{workspace.Name}[/]) ~>[/] ");
             var bExit = input is "exit" or "quit";
+            
+            // TODO: Save workspace on exit
             if (bExit)
             {
-                if (Session.CurrentWorkspace != null && !Session.IsDefaultWorkspace)
-                {
-                    await Session.Persister.SaveAsync(Session.CurrentWorkspace!);
-                }
+                await Session.SaveWorkspace(workspace);
                 break;
             }
-
-            // TODO: Run command parser, for now only api command
-            var split = input.Split('.');
-            var prefix = split[0];
-            var api = workspace.GetApi(prefix);
-            if (api == null)
-            {
-                RSN.Error($"No api registered with prefix '{prefix}'");
-                continue;
-            }
-
-            if (split.Length == 1)
-            {
-                AnsiConsole.MarkupLine(api.Help());
-            }
-
-            var commandPath = string.Join('.', split[1..]);
-            var command = api.GetCommand(commandPath);
-            if (command == null)
-            {
-                AnsiConsole.MarkupLine($"[red]ERR:[/] No operation found with path '{commandPath}'");
-                AnsiConsole.MarkupLine(api.Help());
-                continue;
-            }
-
-            var result = await command.Call() as HttpResponseMessage;
-            var bSucces = result is { IsSuccessStatusCode: true };
-            if (bSucces)
-            {
-                RSN.Success(result.StatusCode.ToString());
-                // TODO: Add pretty format JSON
-                AnsiConsole.WriteLine(await result.Content.ReadAsStringAsync());
-            }
-            else
-            {
-                RSN.Error(result.StatusCode.ToString());
-            }
+            await RunCommand(input, workspace);
         }
 
         return 0;
+    }
+    
+    private string PrettifyJson(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+        };
+        return JsonSerializer.Serialize(doc, options);
+    }
+
+    private async Task RunCommand(string input, Workspace workspace)
+    {
+        try
+        {
+            var rsn = new Interpreter(workspace);
+            var result =  await rsn.Run(input);
+            
+            var bMessage = result.Message != null;
+            if (bMessage)
+            {
+                var outputMessage = Rsn.Msg(result.Message!, result.Status);
+                AnsiConsole.MarkupLine(outputMessage);
+            }
+            
+            var bJson = result.Value != null && result.SerializationHint == SerializationHint.Json;; 
+            var message = bJson ? PrettifyJson(result.Value!) : result.Value;
+            if (message != null)
+            {
+                AnsiConsole.WriteLine(message);
+            }
+        }
+        catch (ReasonException rex)
+        {
+            Rsn.Error(rex.Message);
+        }
     }
 }

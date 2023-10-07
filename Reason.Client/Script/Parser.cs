@@ -8,10 +8,10 @@ public record AstNode();
 public record Script(AstNode Root) : AstNode;
 public record Ref(Token Type, Lit Lit) : AstNode;
 public record Lit(Token Token) : AstNode;
-public record Tuple(IEnumerable<AstNode> Members) : AstNode;
+public record Tuple(List<AstNode> Members) : AstNode;
 public record Ass(Token Token, AstNode Rhs, AstNode Lhs) : AstNode;
-public record CommandPath(IEnumerable<Lit> Segments) : AstNode;
-public record CommandParams(IEnumerable<AstNode> Params) : AstNode;
+public record CommandPath(List<Lit> Segments) : AstNode;
+public record CommandParams(List<AstNode> Params) : AstNode;
 public record Invocation(CommandPath Command, CommandParams? Params = null) : AstNode;
 
 /*
